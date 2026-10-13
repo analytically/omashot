@@ -1,4 +1,4 @@
-# Snapmenu — screenshots for Omarchy
+# Snapmenu — screenshots for [Omarchy](https://omarchy.org)
 
 Click the camera in the bar, choose what to capture, and one key puts the shot on
 your clipboard. No toolbar to learn, no window to find, nothing of the menu ever
