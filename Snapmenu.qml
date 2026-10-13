@@ -68,6 +68,10 @@ Item {
   property int currentWidth: 0
   property int currentHeight: 0
   property bool currentTemporary: false
+  // A temporary shot (Save off) that the card is holding. The file is there so the
+  // card's rows can work on it, and it goes when the card closes without anything
+  // having taken it — see claimTempShot() and releaseTempShot().
+  property string pendingTempShot: ""
 
   property int selectedIndex: 0
   property bool cursorActive: true
@@ -227,6 +231,11 @@ Item {
 
   function close() {
     root.trace("close")
+    // The card is the only thing holding a temporary shot. Whatever closed the overlay
+    // — Escape, a hand-off, the bar icon — nothing took the file, so it goes. A shot
+    // released here was never the user's, so it does not go to the Trash. (A delete
+    // already in flight wins: the temp folder is pruned on the next capture either way.)
+    root.releaseTempShot()
     // Anything in flight belongs to a session the user has walked away from.
     root.captureToken += 1
     if (freezeProc.running) freezeProc.running = false
@@ -432,6 +441,9 @@ Item {
   }
 
   function startFreeze(mode) {
+    // A picker that opens over a card ends that card's session: a temporary shot the
+    // card was holding is not carried into the next capture.
+    root.releaseTempShot()
     root.selectorMode = String(mode || "region")
     // The picker's `capturing` flag is bound to this and never assigned by the
     // picker itself, so a session starts with it clear.
@@ -550,13 +562,18 @@ Item {
     root.nowMs = Date.now()
     if (root.stage !== "settings") root.refreshShots()
 
+    var temporary = result.temporary === true && !root.settings.saveToDisk
     var copied = false
     if (root.settings.copyToClipboard) {
       copied = true
-      root.copyFile(result.path, result.temporary === true && !root.settings.saveToDisk)
-    } else if (result.temporary === true && !root.settings.saveToDisk) {
-      root.removeFile(result.path, true)
+      root.copyFile(result.path, temporary)
     }
+
+    // A temporary shot (Save off) is not deleted here any more. The card is about to
+    // offer Copy, Annotate and Share on it, and deleting it first made those rows act
+    // on a file that was already gone — the delete's own completion then threw the
+    // card back to the menu, so a Save-off capture never showed a card at all.
+    root.pendingTempShot = temporary && !copied ? result.path : ""
 
     if (root.settings.openAnnotate) root.annotateFile(result.path)
 
@@ -569,9 +586,29 @@ Item {
     }
 
     var label = Model.basename(result.path)
+    // No card is coming, so nothing is going to hold a temporary shot: it goes now,
+    // and the notification below is the only thing that mentions it.
+    if (temporary && !copied) root.removeFile(result.path, true)
     var kept = !result.temporary || root.settings.saveToDisk
     root.notify(label + (!kept ? " was discarded"
       : (copied ? " copied to the clipboard" : " saved")))
+  }
+
+  // A temporary shot the card is holding: something took it (every row that hands the
+  // shot off claims it), so the card is no longer what finishes with it. It lives in
+  // the temp folder until a later capture prunes it, which is what makes a copied or
+  // annotated shot safe from the card closing behind it.
+  function claimTempShot(path) {
+    if (root.pendingTempShot !== "" && String(path) === root.pendingTempShot) {
+      root.pendingTempShot = ""
+    }
+  }
+
+  // The other half: nothing took the shot, so the card closing is what ends it.
+  function releaseTempShot() {
+    var path = root.pendingTempShot
+    root.pendingTempShot = ""
+    if (path !== "") root.removeFile(path, true)
   }
 
   function startRecording() {
@@ -607,6 +644,7 @@ Item {
   // cannot do that — it keeps only the last --type — so the native helper owns
   // the selection instead (see native/, built by `make native`).
   function copyFile(path, removeAfter) {
+    root.claimTempShot(path)
     if (root.clipboardBackend === "native") {
       var argv = [root.clipboardHelper, String(path)]
       if (removeAfter) argv = argv.concat(["--temporary"])
@@ -624,7 +662,10 @@ Item {
   function copyCurrent() {
     var path = root.activeFile()
     if (!path) return
-    root.copyFile(path, false)
+    // A temporary shot (Save off) was never meant to stay: the copy is what it was for,
+    // so the file goes once the helper has the selection — the same bargain the copy
+    // struck at capture time. A shot from the history is the user's file, and stays.
+    root.copyFile(path, root.currentTemporary && !root.settings.saveToDisk)
     root.afterHandoff()
     root.notify("Copied " + Model.basename(path))
   }
@@ -644,6 +685,9 @@ Item {
   }
 
   function removeFile(path, permanently) {
+    // Deliberately removing the shot the card holds settles it: nothing is left for
+    // the card to release afterwards.
+    root.claimTempShot(path)
     // One delete at a time: the report names the path this process was started with,
     // and a second X press would otherwise make the first report name the second file.
     if (deleteProc.running) return
@@ -680,6 +724,7 @@ Item {
 
   function annotateFile(path) {
     if (!path) return
+    root.claimTempShot(path)
     Quickshell.execDetached([root.omarchyPath + "/bin/omarchy-launch-tui",
       "/usr/bin/tensaku-edit", String(path)])
   }
@@ -694,11 +739,13 @@ Item {
 
   function shareFile(path) {
     if (!path) return
+    root.claimTempShot(path)
     Quickshell.execDetached([root.omarchyPath + "/bin/omarchy-menu-share", "file", String(path)])
   }
 
   function revealFile(path) {
     if (!path) return
+    root.claimTempShot(path)
     root.runAction(["/usr/bin/bash", "-c",
       "if command -v nautilus >/dev/null 2>&1; then exec nautilus --select \"$1\"; fi;"
       + " exec xdg-open \"$(dirname -- \"$1\")\"", "snapmenu-reveal", String(path)])

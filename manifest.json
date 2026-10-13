@@ -57,7 +57,7 @@
         "type": "boolean",
         "label": "Save",
         "defaultValue": true,
-        "description": "Keep the screenshot in the export folder. Off writes a temporary file and a copy is taken only if Copy file to clipboard is on."
+        "description": "Keep the screenshot in the export folder. Off writes a temporary file that goes when the card closes, unless a row on the card takes it."
       },
       {
         "key": "showResult",

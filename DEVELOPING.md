@@ -53,7 +53,10 @@ History *is* the export folder: a listing of the newest PNGs there, so a shot th
 leaves the folder leaves the list, no matter who removed it. Delete uses `gio
 trash` when available and `rm` otherwise; a shot the plugin is throwing away (with
 `saveToDisk` off) is deleted rather than sent to the Trash, and the temp directory
-is pruned.
+is pruned. Such a shot is `pendingTempShot` while the card holds it: the card's rows
+work on a file that is still there, `claimTempShot` marks it as taken when one of
+them hands it off, and `releaseTempShot` is what removes it when the card closes
+without anything taking it.
 
 ## Files
 
