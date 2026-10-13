@@ -94,6 +94,18 @@ while (($# > 0)); do
     SCALE="${2:-}"
     shift 2
     ;;
+  --optimize)
+    # A shot that is already on disk: this mode re-compresses it in place, which is the
+    # slow half of a capture, run after the card is up (see the branch below).
+    OPTIMIZE="${2:-}"
+    shift 2
+    ;;
+  --level)
+    # The zlib level the re-compress uses. PNG_LEVEL is a different setting: that is the
+    # one grim writes at, and it stays fast on purpose.
+    OPT_LEVEL="${2:-5}"
+    shift 2
+    ;;
   --from-clipboard)
     FROM_CLIPBOARD=1
     shift
@@ -194,6 +206,14 @@ prune_tmp() {
 }
 
 emit_fail() { jq -cn --arg r "$1" '{ok:false,reason:$r}'; }
+
+# The optimize pass reports the sizes it worked with, so the caller can say what it saved
+# and correct the size it is showing.
+emit_optimize() { # path before after saved
+  jq -cn --arg p "$1" --argjson b "${2:-0}" --argjson a "${3:-0}" \
+    --argjson s "${4:-false}" \
+    '{ok:true,mode:"optimize",path:$p,before:$b,after:$a,saved:$s}'
+}
 
 # Only the paths that actually read pixels need grim; --delete, --rects and
 # --from-clipboard must work on a box where it is missing.
@@ -675,6 +695,72 @@ if ((FROM_CLIPBOARD)); then
 
   remember_shot "$file"
   emit_ok "$file" 0 0 "clipboard" "$TEMP"
+  exit 0
+fi
+
+# --------------------------------------------------------------- optimize
+
+# The second half of a capture. The shot is already on disk at the level grim writes
+# fast, and this re-compresses it at a slower one — which is why it runs after the card
+# is up rather than in front of it. The file keeps its name and its timestamp, so the
+# path that is on the clipboard, the history listing, and anything the user has already
+# opened keep working.
+#
+# A pass that cannot improve the file is not a failure: the shot exists and is correct.
+if [[ -n $OPTIMIZE ]]; then
+  file="$OPTIMIZE"
+  if [[ ! -f $file ]]; then
+    emit_fail no-file
+    exit 0
+  fi
+  before=$(stat -c '%s' -- "$file" 2>/dev/null) || before=0
+  [[ $before =~ ^[0-9]+$ ]] || before=0
+
+  # Without ImageMagick the shot is simply left the way the capture wrote it.
+  if [[ ! -x $MAGICK ]]; then
+    emit_optimize "$file" "$before" "$before" false
+    exit 0
+  fi
+
+  # A dot-prefixed sibling of the shot: the capture history is a listing of the export
+  # folder, and no glob matches this name.
+  tmp="$(dirname -- "$file")/.$(basename -- "$file").opt.png"
+  level="${OPT_LEVEL:-5}"
+  if ! "$MAGICK" "$file" -define "png:compression-level=$level" "$tmp" 2>/dev/null \
+    || [[ ! -s $tmp ]]; then
+    rm -f -- "$tmp" 2>/dev/null
+    emit_optimize "$file" "$before" "$before" false
+    exit 0
+  fi
+  after=$(stat -c '%s' -- "$tmp" 2>/dev/null) || after=0
+  [[ $after =~ ^[0-9]+$ ]] || after=0
+
+  # Nothing to gain: the file is already optimized, or this pass cannot beat what is
+  # there. Keeping the shot that exists is what stops every capture from rewriting a file
+  # it cannot improve.
+  if ((after == 0 || after >= before)); then
+    rm -f -- "$tmp" 2>/dev/null
+    emit_optimize "$file" "$before" "$before" false
+    exit 0
+  fi
+
+  # Deleted while this ran: the rename below is what publishes the file, so the check has
+  # to be here and not at the top — otherwise a shot the user threw away comes back.
+  if [[ ! -f $file ]]; then
+    rm -f -- "$tmp" 2>/dev/null
+    emit_fail gone
+    exit 0
+  fi
+
+  # The filename carries the moment the shot was taken and the listing is sorted by this,
+  # so the second stage must not make an older shot look newer.
+  touch -r "$file" "$tmp" 2>/dev/null || true
+  if ! mv -f -- "$tmp" "$file" 2>/dev/null; then
+    rm -f -- "$tmp" 2>/dev/null
+    emit_fail optimize-failed
+    exit 0
+  fi
+  emit_optimize "$file" "$before" "$after" true
   exit 0
 fi
 

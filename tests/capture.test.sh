@@ -101,6 +101,13 @@ if [[ $out == "-" ]]; then printf "CROPPED"; exit 0; fi
 mkdir -p "$(dirname "$out")"; printf "CROPPED" >"$out"'
 }
 
+# magick for the optimize pass: records argv, then runs whatever the case asks for — a
+# smaller file, a bigger one, or deleting the input first (a shot deleted mid-pass).
+stub_magick_optimize() { # body
+  stub_recorder magick "out=\"\${!#}\"
+$1"
+}
+
 # vips crop <in> <out> <left> <top> <width> <height>: the output is the third
 # argument, so it needs a stub of its own rather than stub_recorder.
 stub_vips() {
@@ -770,6 +777,82 @@ case_missing_tools_are_reported() {
   assert_eq "reason" "$(jq_str "$json" '.reason')" "grim-missing"
 }
 
+case_optimize_shrinks_the_shot_in_place() {
+  new_case "--optimize re-compresses the shot the capture already wrote"
+  printf 'a big fat png payload' >"$CASE/out/shot.png"
+  stub_magick_optimize 'printf small >"$out"'
+
+  local json
+  json=$(run_capture --optimize "$CASE/out/shot.png" --level 5)
+
+  assert_eq "ok" "$(jq_str "$json" '.ok')" "true"
+  assert_eq "it saved something" "$(jq_str "$json" '.saved')" "true"
+  assert_eq "the path is the one it was given" "$(jq_str "$json" '.path')" "$CASE/out/shot.png"
+  assert_eq "before" "$(jq_str "$json" '.before')" "21"
+  assert_eq "after" "$(jq_str "$json" '.after')" "5"
+  assert_eq "the shot is now the smaller file" "$(cat "$CASE/out/shot.png")" "small"
+  assert_contains "at the level it was given" "$(cat "$CALLS/magick.log")" \
+    "png:compression-level=5"
+  # The new file arrives by rename, and the name it is written under first is
+  # dot-prefixed: the capture history is a listing of this folder, and a leftover
+  # ".shot.png.opt.png" would turn up in it as a shot.
+  assert_eq "and nothing else is left in the folder" "$(ls -A "$CASE/out" | wc -l)" "1"
+}
+
+case_optimize_keeps_the_shot_when_there_is_nothing_to_gain() {
+  new_case "--optimize leaves a shot alone when the re-encode is no smaller"
+  printf 'small' >"$CASE/out/shot.png"
+  stub_magick_optimize 'printf "a much bigger payload" >"$out"'
+
+  local json
+  json=$(run_capture --optimize "$CASE/out/shot.png")
+
+  assert_eq "ok" "$(jq_str "$json" '.ok')" "true"
+  assert_eq "nothing to report" "$(jq_str "$json" '.saved')" "false"
+  # Rewriting a file with a copy of itself would move its timestamp, and the history is
+  # ordered by that.
+  assert_eq "the shot is the one that was there" "$(cat "$CASE/out/shot.png")" "small"
+  assert_eq "and the pass cleaned up after itself" "$(ls -A "$CASE/out" | wc -l)" "1"
+}
+
+case_optimize_does_not_rename_a_deleted_shot_back() {
+  new_case "--optimize does not bring back a shot deleted while it ran"
+  printf 'a big fat png payload' >"$CASE/out/shot.png"
+  # Deleting a shot takes a moment, and the pass takes longer than that. The replacement
+  # is smaller, so only the deleted file can stop it being renamed into place.
+  stub_magick_optimize 'rm -f -- "$1"; printf tiny >"$out"'
+
+  local json
+  json=$(run_capture --optimize "$CASE/out/shot.png")
+
+  assert_eq "not ok" "$(jq_str "$json" '.ok')" "false"
+  assert_eq "and it says the shot went" "$(jq_str "$json" '.reason')" "gone"
+  assert_file_missing "the shot is still deleted" "$CASE/out/shot.png"
+  assert_eq "and the smaller copy goes with it" "$(ls -A "$CASE/out" | wc -l)" "0"
+}
+
+case_optimize_without_imagemagick() {
+  new_case "--optimize is a no-op without ImageMagick, not a failure"
+  printf 'shot' >"$CASE/out/shot.png"
+
+  local json
+  json=$(run_capture --optimize "$CASE/out/shot.png")
+
+  # run_capture points SNAPMENU_MAGICK at the case's own stub directory, and this case
+  # deliberately does not put one there.
+  assert_eq "ok" "$(jq_str "$json" '.ok')" "true"
+  assert_eq "nothing was saved" "$(jq_str "$json" '.saved')" "false"
+  assert_eq "and the shot is untouched" "$(cat "$CASE/out/shot.png")" "shot"
+}
+
+case_optimize_reports_a_file_that_is_not_there() {
+  new_case "--optimize on a shot that is not on disk"
+  local json
+  json=$(run_capture --optimize "$CASE/out/nothing.png")
+  assert_eq "not ok" "$(jq_str "$json" '.ok')" "false"
+  assert_eq "and it says why" "$(jq_str "$json" '.reason')" "no-file"
+}
+
 case_unknown_requests_are_refused() {
   new_case "an unknown request is refused"
   local json
@@ -818,6 +901,11 @@ case_clipboard_prefers_png_and_reports_empty
 case_delete_prefers_the_trash
 case_delete_can_skip_the_trash
 case_missing_tools_are_reported
+case_optimize_shrinks_the_shot_in_place
+case_optimize_keeps_the_shot_when_there_is_nothing_to_gain
+case_optimize_does_not_rename_a_deleted_shot_back
+case_optimize_without_imagemagick
+case_optimize_reports_a_file_that_is_not_there
 case_unknown_requests_are_refused
 
 printf '\n  capture helper: %d passed, %d failed\n' "$PASS" "$FAIL"
