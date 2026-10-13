@@ -1,0 +1,15 @@
+*.tar
+*.tar.*
+*.jar
+*.exe
+*.msi
+*.deb
+*.zip
+*.tgz
+*.log
+*.log.*
+*.sig
+
+# Rust helper: build output and the compiled binary
+native/**/target/
+bin/snapmenu-clipboard

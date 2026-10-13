@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.analytically.snapmenu",
+  "name": "Snapmenu",
+  "version": "0.1.0",
+  "author": "Mathias Bogaert",
+  "license": "MIT",
+  "description": "Screenshot menu for Omarchy: capture area, previous area, window or screen with an optional self-timer, then copy, annotate, share, reveal or delete the shot from a quick access card, with a capture history tray.",
+  "homepage": "https://github.com/analytically/snapmenu",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Snapmenu.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Snapmenu",
+    "description": "Screenshot menu: capture area, previous area, window or screen, a self-timer, capture history, and after-capture actions.",
+    "category": "Utilities",
+    "aliases": [
+      "snapmenu",
+      "screenshot",
+      "screenshots",
+      "shot",
+      "capture",
+      "screen capture"
+    ],
+    "defaultSection": "right",
+    "allowMultiple": false,
+    "defaults": {
+      "copyToClipboard": true,
+      "saveToDisk": true,
+      "showResult": true,
+      "openAnnotate": false,
+      "exportDir": "",
+      "delay": 0,
+      "showCursor": false,
+      "confirmDelete": false,
+      "glaze": 0.1,
+      "dim": 0,
+      "deleteMode": "trash",
+      "cardWidth": 500
+    },
+    "schema": [
+      {
+        "key": "copyToClipboard",
+        "type": "boolean",
+        "label": "Copy file to clipboard",
+        "defaultValue": true,
+        "description": "Put every screenshot on the clipboard as a PNG as soon as it is taken."
+      },
+      {
+        "key": "saveToDisk",
+        "type": "boolean",
+        "label": "Save",
+        "defaultValue": true,
+        "description": "Keep the screenshot in the export folder. Off writes a temporary file and a copy is taken only if Copy file to clipboard is on."
+      },
+      {
+        "key": "showResult",
+        "type": "boolean",
+        "label": "Show action card",
+        "defaultValue": true,
+        "description": "Open the quick access card after a capture, with copy, annotate, share, reveal and delete for the shot just taken."
+      },
+      {
+        "key": "openAnnotate",
+        "type": "boolean",
+        "label": "Open annotate tool",
+        "defaultValue": false,
+        "description": "Hand every screenshot straight to tensaku instead of waiting for the card."
+      },
+      {
+        "key": "exportDir",
+        "type": "string",
+        "label": "Export folder",
+        "defaultValue": "",
+        "description": "Where screenshots are saved. Empty follows $OMARCHY_SCREENSHOT_DIR, then the XDG Pictures directory."
+      },
+      {
+        "key": "delay",
+        "type": "integer",
+        "label": "Self-timer (seconds)",
+        "defaultValue": 0,
+        "min": 0,
+        "max": 15,
+        "step": 1,
+        "description": "Seconds to wait before a capture starts: 0 (off, the default), 3, 5, 10 or 15."
+      },
+      {
+        "key": "showCursor",
+        "type": "boolean",
+        "label": "Show cursor",
+        "defaultValue": false,
+        "description": "Draw the pointer into the screenshot. Off by default, matching what omarchy capture does."
+      },
+      {
+        "key": "confirmDelete",
+        "type": "boolean",
+        "label": "Confirm deletion",
+        "defaultValue": false,
+        "description": "Ask before deleting a screenshot. Off by default: deleting is a deliberate press and the action card names the file."
+      },
+      {
+        "key": "glaze",
+        "type": "number",
+        "label": "Selection glaze",
+        "defaultValue": 0.1,
+        "min": 0,
+        "max": 0.2,
+        "step": 0.02,
+        "description": "White wash over the area being captured, so it reads as chosen: 0 (off), 0.06, 0.1 (the default), 0.14 or 0.2."
+      },
+      {
+        "key": "dim",
+        "type": "number",
+        "label": "Selection dim",
+        "defaultValue": 0,
+        "min": 0,
+        "max": 0.55,
+        "step": 0.05,
+        "description": "Darkening of everything outside the selection while aiming: 0 (off, the default), 0.25, 0.4 or 0.55."
+      },
+      {
+        "key": "deleteMode",
+        "type": "select",
+        "label": "Delete to",
+        "defaultValue": "trash",
+        "options": [
+          {
+            "value": "trash",
+            "label": "Trash"
+          },
+          {
+            "value": "permanently",
+            "label": "Permanently"
+          }
+        ],
+        "description": "Where a deleted screenshot goes. Trash by default, so a shot deleted by mistake is still recoverable."
+      },
+      {
+        "key": "cardWidth",
+        "type": "number",
+        "label": "Card width",
+        "defaultValue": 500,
+        "min": 360,
+        "max": 760,
+        "step": 20,
+        "description": "Width of the action card: 360 (compact), 500 (normal), 620 (wide) or 760 (extra wide). The preview fills it, so the card's width is the size of the shot on screen."
+      }
+    ]
+  }
+}
