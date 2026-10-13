@@ -35,6 +35,10 @@ Item {
   }
 
   property bool hasPrevious: false
+  // Set by the probe below and read when the rows are built, so both surfaces offer
+  // Open from Clipboard on the same terms.
+  property bool hasClipboardImage: false
+  onHasClipboardImageChanged: if (root.open) root.reload()
   property bool recording: false
   property var rows: []
   property int selectedIndex: 0
@@ -74,7 +78,8 @@ Item {
     root.rows = Model.menuRows({
       hasPrevious: root.hasPrevious,
       delay: root.delay,
-      recording: root.recording
+      recording: root.recording,
+      hasClipboardImage: root.hasClipboardImage
       // No shot count here: the dropdown does not need to walk the export
       // folder to be useful, and the row says so instead of guessing zero.
     })
@@ -129,6 +134,17 @@ Item {
 
   // ---- state the rows need ---------------------------------------------------
 
+  // Only an image is worth the row: the import writes the clipboard's image out to a
+  // file, and a path or a paragraph on the clipboard has nothing for it to open.
+  Process {
+    id: clipboardProc
+    command: ["/usr/bin/wl-paste", "--list-types"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.hasClipboardImage = Model.clipboardHasImage(String(text || ""))
+    }
+  }
+
   Process {
     id: previousProc
     command: ["/usr/bin/stat", "-c", "%s", root.stateDir + "/last-region"]
@@ -139,6 +155,12 @@ Item {
         root.hasPrevious = isFinite(size) && size > 0
       }
     }
+  }
+
+  function refreshClipboard() {
+    // Asked when the menu opens: the answer joins the rows a moment later, which is
+    // why the reply re-runs the row build rather than waiting for it.
+    if (!clipboardProc.running) clipboardProc.running = true
   }
 
   Process {
@@ -158,7 +180,7 @@ Item {
     contentWidth: panel.fittedContentWidth(Style.space(370))
     contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
-    onOpenChanged: if (open) root.reload()
+    onOpenChanged: if (open) { root.reload(); root.refreshClipboard() }
 
     PanelKeyCatcher {
       id: keyCatcher

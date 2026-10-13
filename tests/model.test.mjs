@@ -25,6 +25,7 @@ const EXPORTS = [
   "normalizeDim", "dimLabel", "nextDim", "DIM_CHOICES", "normalizeDeleteMode", "deleteModeLabel",
   "nextDeleteMode", "DELETE_MODES", "normalizeLevel", "levelLabel", "nextLevel", "shotCountLabel",
   "deleteVerb", "needsConfirm", "indexOfShot", "neighbourShot", "barIcon", "menuRows",
+  "CLIPBOARD_IMAGE_TYPES", "clipboardHasImage",
   "historyRows", "resultRows", "settingsRows", "aboutRows", "normalizeDrag", "dragRect",
   "dragConstraintLabel", "dragModeFor", "globalGeometry", "clipRectToBounds", "localRects", "rectAt",
   "rectArea", "windowRects", "nextRect", "rectLabel", "rowSelectable", "clampIndex",
@@ -585,6 +586,44 @@ test("the card can say how long ago the shot it is showing was taken", () => {
   assert.equal(Model.shotAge(null, "/p/new.png", now), "")
 })
 
+test("Open from Clipboard is only offered when there is an image to open", () => {
+  // The row writes the clipboard's image out to a file. A text payload — a path, a
+  // URL, a paragraph — has nothing for it to open, so the row is not offered: the
+  // same treatment Capture Previous Area gets with nothing to repeat.
+  assert.equal(Model.clipboardHasImage("image/png\n"), true)
+  assert.equal(Model.clipboardHasImage("text/plain\ntext/uri-list\n"), false)
+  assert.equal(Model.clipboardHasImage(""), false)
+  assert.equal(Model.clipboardHasImage("   "), false)
+  // Types arrive one per line and the wanted one is rarely first.
+  assert.equal(Model.clipboardHasImage("text/plain\nimage/jpeg\n"), true)
+  // An image type the import cannot write out is not an image it can open: the row
+  // would appear and then fail with "no image on the clipboard".
+  assert.equal(Model.clipboardHasImage("image/svg+xml\n"), false)
+  assert.equal(Model.clipboardHasImage("image/x-icon\n"), false)
+
+  const withImage = Model.menuRows({ hasClipboardImage: true })
+  const row = withImage.find((entry) => entry.id === "from-clipboard")
+  assert.ok(row, "the row appears with an image on the clipboard")
+  assert.equal(row.label, "Open from Clipboard")
+  assert.deepEqual(row.payload, { action: "from-clipboard" })
+  assert.equal(row.detail, undefined)
+  assert.equal(Model.menuRows({ hasClipboardImage: false }).some((entry) => entry.id === "from-clipboard"), false)
+  assert.equal(Model.menuRows({}).some((entry) => entry.id === "from-clipboard"), false)
+  // Hidden, not disabled: a row that cannot be used is not a row to explain.
+  assert.equal(withImage.some((entry) => entry === null), false)
+})
+
+test("the model and the capture script agree about which images can be opened", () => {
+  // The list lives in two places — the model decides whether to offer the row, the
+  // script decides whether it can write the image out — and a change in one that
+  // misses the other is a row that appears and then fails.
+  const script = readFileSync(join(here, "..", "bin", "snapmenu-capture.sh"), "utf8")
+  const line = script.split("\n").find((l) => /for candidate in image\//.test(l))
+  assert.ok(line, "the script still lists candidate image types")
+  const types = line.replace(/.*for candidate in /, "").replace(/;.*$/, "").trim().split(/\s+/)
+  assert.deepEqual(types, Model.CLIPBOARD_IMAGE_TYPES)
+})
+
 test("each capture row is drawn with its own glyph", () => {
   // The previous-area row lost its glyph to a copy of another row once already:
   // repeat, refresh and camera are three different promises on a menu.
@@ -863,11 +902,13 @@ test("menuRows mirrors the capture menu and reflects state", () => {
 
   const ids = noHistory.map((row) => row.id)
   for (const wanted of ["region-or-window", "area", "fullscreen", "window",
-    "record", "timer", "open", "from-clipboard", "history", "settings"]) {
+    "record", "timer", "open", "history", "settings"]) {
     assert.ok(ids.includes(wanted), `missing row ${wanted}`)
   }
-  // The one row that comes and goes with state.
+  // The rows that come and go with state: what a capture needs, and what the
+  // clipboard can be asked to open.
   assert.ok(withHistory.map((row) => row.id).includes("previous"))
+  assert.ok(!ids.includes("from-clipboard"))
   // About lives under Settings, not on the menu, and text extraction is off the
   // menu for now.
   assert.ok(!ids.includes("about"))
@@ -990,7 +1031,8 @@ test("menu subtext only where it says something the label does not", () => {
 })
 
 test("every menu row carries the command the dropdown sends", () => {
-  const rows = Model.menuRows({ hasPrevious: true, delay: 3, recording: true, shotCount: 4 })
+  const rows = Model.menuRows({ hasPrevious: true, delay: 3, recording: true, shotCount: 4,
+    hasClipboardImage: true })
   const payloadOf = (id) => rows.find((row) => row.id === id).payload
 
   // Capture rows name their mode; the overlay runs it.

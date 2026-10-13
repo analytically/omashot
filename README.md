@@ -72,6 +72,11 @@ is armed, and `Esc` cancels it.
 the same red dot Omarchy uses while it runs — whether the recording was started
 here or anywhere else.
 
+**Open from Clipboard** appears only when the clipboard holds an image — a copied
+picture, or a shot from another one of these rows. A path or a paragraph on the
+clipboard leaves nothing for it to open, so the row is not offered; **Previous
+Area** does the same disappearing act until there is a region to repeat.
+
 ## Install
 
 ```bash

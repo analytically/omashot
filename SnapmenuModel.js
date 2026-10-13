@@ -928,9 +928,27 @@ function deleteVerb(mode) {
 
 // The capture menu, mapped onto what Omarchy can actually do. Rows are
 // plain data so the QML stays presentation and key routing only.
+// What `wl-paste --list-types` can offer that the import knows how to write out, in the
+// order the import tries them (a test keeps this list and the script's together). An
+// image type outside it — an icon, an SVG — is not something the row could open.
+var CLIPBOARD_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp",
+  "image/gif", "image/bmp", "image/tiff"]
+
+// The types arrive one per line, and the image is rarely the first one: a shell paste
+// carries text/plain alongside it.
+function clipboardHasImage(types) {
+  var lines = String(types || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var type = lines[i].replace(/^\s+|\s+$/g, "")
+    if (type !== "" && CLIPBOARD_IMAGE_TYPES.indexOf(type) >= 0) return true
+  }
+  return false
+}
+
 function menuRows(state) {
   var s = state || {}
   var previous = s.hasPrevious === true
+  var clipboardImage = s.hasClipboardImage === true
   var recording = s.recording === true
   var delay = normalizeDelay(s.delay)
   // Every selectable row carries the command a dropdown (or any other
@@ -969,8 +987,10 @@ function menuRows(state) {
     { kind: "action", id: "open", icon: ICON.open, label: "Open…",
       detail: "Annotate an image already on disk",
       action: "open", payload: { action: "open" } },
-    { kind: "action", id: "from-clipboard", icon: ICON.clipboard, label: "Open from Clipboard",
-      action: "from-clipboard", payload: { action: "from-clipboard" } },
+    clipboardImage
+      ? { kind: "action", id: "from-clipboard", icon: ICON.clipboard, label: "Open from Clipboard",
+        action: "from-clipboard", payload: { action: "from-clipboard" } }
+      : null,
     { kind: "action", id: "history", icon: ICON.history, label: "Capture History…",
       detail: shotCountLabel(s.shotCount), action: "history",
       payload: { stage: "history" } },

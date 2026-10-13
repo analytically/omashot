@@ -434,5 +434,42 @@ for _ in $(seq 1 25); do
 done
 check "and gives the icon back when it ends" "$TONE" "armed"
 
+printf 'the clipboard row follows what the clipboard holds\n'
+# Open from Clipboard writes the clipboard's image out to a file, so it is only offered
+# when there is one: a path, a URL or a paragraph on the clipboard has nothing for it to
+# open, and a row that fails is worse than a row that is not there. The overlay's own
+# view of the clipboard is what both surfaces build their rows from.
+printf 'snapmenu-clipboard-text' | wl-copy
+sleep 0.5
+omarchy-shell snapmenu.menu close >/dev/null 2>&1
+sleep 0.5
+omarchy-shell snapmenu.menu open >/dev/null 2>&1
+sleep 1.4
+CLIP_ROWS=$(omarchy-shell snapmenu.menu rows 2>/dev/null)
+check "text on the clipboard hides the row" \
+  "$(jq '[.[] | select(.id == "from-clipboard")] | length' <<<"$CLIP_ROWS")" "0"
+check "and the dropdown still knows its own rows" \
+  "$(jq '[.[] | select(.id == "region-or-window")] | length' <<<"$CLIP_ROWS")" "1"
+omarchy-shell snapmenu.menu close >/dev/null 2>&1
+sleep 0.6
+
+wl-copy --type image/png <"$CASE_DESKTOP"
+sleep 0.5
+omarchy-shell snapmenu.menu open >/dev/null 2>&1
+sleep 1.4
+CLIP_ROWS=$(omarchy-shell snapmenu.menu rows 2>/dev/null)
+check "an image on the clipboard shows it" \
+  "$(jq '[.[] | select(.id == "from-clipboard")] | length' <<<"$CLIP_ROWS")" "1"
+omarchy-shell snapmenu.menu close >/dev/null 2>&1
+sleep 0.6
+# The overlay draws that menu too — it comes up from the card's "Back to Menu" — and it
+# builds its rows in its own process, so its answer has to be its own.
+omarchy-shell shell summon "$PLUGIN_ID" '{"stage":"menu"}' >/dev/null 2>&1
+sleep 1.6
+check "and the overlay's menu agrees" \
+  "$(omarchy-shell shell call "$PLUGIN_ID" debugState '' | jq -r '.hasClipboardImage, .stage' | tr '\n' ' ')" "true menu"
+omarchy-shell shell hide "$PLUGIN_ID" >/dev/null 2>&1
+sleep 0.6
+
 printf '\n  menu dropdown: %d passed, %d failed\n' "$PASS" "$FAIL"
 ((FAIL == 0))

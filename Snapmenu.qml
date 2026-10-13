@@ -62,6 +62,9 @@ Item {
   }
   property bool recording: false
   property bool hasPrevious: false
+  // Whether the clipboard holds an image the import can write out. Wayland has no
+  // clipboard-changed event to wait for, so this is asked for when the menu is built.
+  property bool hasClipboardImage: false
 
   property string stage: "menu"
   property string currentFile: ""
@@ -155,6 +158,7 @@ Item {
     }
     return Model.menuRows({
       hasPrevious: root.hasPrevious,
+      hasClipboardImage: root.hasClipboardImage,
       delay: root.settings.delay,
       recording: root.recording,
       shotCount: root.shots.length
@@ -292,15 +296,23 @@ Item {
 
   function setStage(name) {
     root.stage = String(name || "menu")
+    // The menu's rows include a row that comes and goes with the clipboard, and the
+    // overlay's copy of that answer is only as fresh as its last probe.
+    if (root.stage === "menu") root.refreshClipboard()
     root.selectedIndex = Model.firstEnabledIndex(root.rows)
     root.cursorActive = true
     root.trace("stage:" + root.stage)
     root.focusCard()
   }
 
+  function refreshClipboard() {
+    if (!clipboardTypesProc.running) clipboardTypesProc.running = true
+  }
+
   function refreshEnvironment() {
     if (!statProc.running) statProc.running = true
     if (!recordProc.running) recordProc.running = true
+    root.refreshClipboard()
     if (root.stage !== "settings") root.refreshShots()
   }
 
@@ -1245,6 +1257,17 @@ Item {
     }
   }
 
+  // Only an image is worth the row: the import writes the clipboard's image out to a
+  // file, and a path or a paragraph on the clipboard has nothing for it to open.
+  Process {
+    id: clipboardTypesProc
+    command: ["/usr/bin/wl-paste", "--list-types"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.hasClipboardImage = Model.clipboardHasImage(String(text || ""))
+    }
+  }
+
   Process {
     id: recordProc
     command: ["/usr/bin/pgrep", "-f", "^gpu-screen-recorder"]
@@ -1912,6 +1935,7 @@ Item {
       shotCount: root.shots.length,
       delay: root.settings.delay,
       showResult: root.settings.showResult,
+      hasClipboardImage: root.hasClipboardImage,
       traceLog: root.traceLog,
       hoverRect: selector.hoverRect,
       keyboardRect: selector.keyboardRect,
