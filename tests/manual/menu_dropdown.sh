@@ -470,7 +470,8 @@ sleep 0.6
 omarchy-shell shell summon "$PLUGIN_ID" '{"stage":"menu"}' >/dev/null 2>&1
 sleep 1.6
 check "and the overlay's menu agrees" \
-  "$(omarchy-shell shell call "$PLUGIN_ID" debugState '' | jq -r '.hasClipboardImage, .stage' | tr '\n' ' ')" "true menu"
+  "$(omarchy-shell shell call "$PLUGIN_ID" debugState '' | jq -r '"\(.hasClipboardImage) \(.stage)"')" \
+  "true menu"
 omarchy-shell shell hide "$PLUGIN_ID" >/dev/null 2>&1
 sleep 0.6
 
