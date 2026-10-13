@@ -75,6 +75,13 @@ Item {
   // card's rows can work on it, and it goes when the card closes without anything
   // having taken it — see claimTempShot() and releaseTempShot().
   property string pendingTempShot: ""
+  // The second stage of a capture: the shot the pass is queued for, the ones waiting
+  // behind it, and the one running now. It is queued when the card's preview is on
+  // screen — not when the capture lands — so the pass can never delay the card and can
+  // never rename a file out from under the image that is loading it.
+  property string optimizeCandidate: ""
+  property var optimizeQueue: []
+  property string optimizingPath: ""
 
   property int selectedIndex: 0
   property bool cursorActive: true
@@ -587,6 +594,11 @@ Item {
     // card back to the menu, so a Save-off capture never showed a card at all.
     root.pendingTempShot = temporary && !copied ? result.path : ""
 
+    // A saved shot is a candidate for the second stage; a temporary one is not, because it
+    // is not meant to stay on disk at all.
+    root.optimizeCandidate = temporary ? "" : result.path
+    if (root.optimizeCandidate !== "") optimizeFallback.restart()
+
     if (root.settings.openAnnotate) root.annotateFile(result.path)
 
     if (root.settings.showResult) {
@@ -621,6 +633,56 @@ Item {
     var path = root.pendingTempShot
     root.pendingTempShot = ""
     if (path !== "") root.removeFile(path, true)
+  }
+
+  // ---------------------------------------------------------------- re-compress
+
+  // One pass at a time, and the rest wait their turn. Five shots in a row must not put
+  // five ImageMagick processes on the machine, and a pass that is running must not be
+  // restarted by the next capture.
+  function queueOptimize(path) {
+    if (root.settings.optimizeShots <= 0) return
+    if (String(path) === "" || String(path) === root.optimizingPath) return
+    if (root.optimizeQueue.indexOf(String(path)) >= 0) return
+    root.optimizeQueue = root.optimizeQueue.concat([String(path)])
+    root.pumpOptimize()
+  }
+
+  function pumpOptimize() {
+    if (root.optimizingPath !== "" || root.optimizeQueue.length === 0) return
+    var path = String(root.optimizeQueue[0])
+    root.optimizeQueue = root.optimizeQueue.slice(1)
+    root.optimizingPath = path
+    optimizeProc.target = path
+    // Traced because this is the moment the pass starts, and the order of this entry
+    // against "stage:result" is the whole latency promise: the card is up before the
+    // compressor is asked to do anything.
+    root.trace("optimize:start:" + Model.basename(path))
+    // Snapshotted: the command must not change under a process that is already running.
+    optimizeProc.level = root.settings.optimizeShots
+    optimizeProc.running = true
+  }
+
+  function startOptimizeCandidate() {
+    var path = root.optimizeCandidate
+    root.optimizeCandidate = ""
+    optimizeFallback.stop()
+    if (path !== "") root.queueOptimize(path)
+  }
+
+  function handleOptimize(stdout) {
+    var result = Model.parseOptimizeResult(stdout)
+    root.trace(result.saved
+      ? "optimized:" + result.before + "->" + result.after
+      : "optimize:" + (result.reason || (result.ok ? "no-gain" : "failed")))
+    if (result.saved) {
+      // The sizes the history shows are file sizes, and this file just changed.
+      if (root.stage !== "settings") root.refreshShots()
+      root.notify((result.savedBytes / 1024).toFixed(0) + " KB smaller: "
+        + Model.basename(result.path))
+    }
+    root.optimizingPath = ""
+    root.pumpOptimize()
   }
 
   function startRecording() {
@@ -878,6 +940,7 @@ Item {
       root.persistSettings({ cardWidth: Model.nextCardWidth(root.settings.cardWidth) })
     }
     else if (action === "cycle-dim") root.persistSettings({ dim: Model.nextDim(root.settings.dim) })
+    else if (action === "cycle-optimize") root.persistSettings({ optimizeShots: Model.nextOptimize(root.settings.optimizeShots) })
     else if (action === "open-url") root.openUrl(String(row.url || ""))
     else if (action === "cycle-delete-mode") {
       root.persistSettings({ deleteMode: Model.nextDeleteMode(root.settings.deleteMode) })
@@ -1259,6 +1322,37 @@ Item {
 
   // Only an image is worth the row: the import writes the clipboard's image out to a
   // file, and a path or a paragraph on the clipboard has nothing for it to open.
+  // The pass runs as its own process at idle priority: `nice -n 19` plus the idle I/O
+  // class are why a pass that costs 330 ms on a full-screen shot does not show up in a
+  // capture taken while it runs (measured in tests/manual/optimize.sh).
+  Process {
+    id: optimizeProc
+    property string target: ""
+    property int level: 5
+    command: ["/usr/bin/ionice", "-c3", "/usr/bin/nice", "-n", "19",
+      "/usr/bin/bash", root.captureScript,
+      "--optimize", optimizeProc.target, "--level", String(optimizeProc.level)]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.handleOptimize(String(text || ""))
+    }
+    // A process that never starts produces no stream to finish, and the queue must not
+    // wedge behind it.
+    onExited: if (root.optimizingPath !== "" && root.optimizingPath === optimizeProc.target) {
+      root.optimizingPath = ""
+      root.pumpOptimize()
+    }
+  }
+
+  // What starts the pass is normally the preview: the shot is on screen, so nobody is
+  // waiting on the file any more. With the card switched off there is no preview, and a
+  // shot nobody is looking at has nobody to delay — so a short timer starts the pass.
+  Timer {
+    id: optimizeFallback
+    interval: 1200
+    onTriggered: root.startOptimizeCandidate()
+  }
+
   Process {
     id: clipboardTypesProc
     command: ["/usr/bin/wl-paste", "--list-types"]
@@ -1717,6 +1811,10 @@ Item {
               cache: false
               sourceSize.width: preview.width * Screen.devicePixelRatio
               sourceSize.height: preview.height * Screen.devicePixelRatio
+              // The second stage of the capture waits for this: the file can be
+              // re-compressed once the picture is up, and not before, or the rename
+              // would race the load that is reading it.
+              onStatusChanged: if (status === Image.Ready) root.startOptimizeCandidate()
             }
 
             Text {
@@ -1935,6 +2033,9 @@ Item {
       shotCount: root.shots.length,
       delay: root.settings.delay,
       showResult: root.settings.showResult,
+      optimizing: root.optimizingPath !== "",
+      optimizeQueued: root.optimizeQueue.length,
+      optimizeLevel: root.settings.optimizeShots,
       hasClipboardImage: root.hasClipboardImage,
       traceLog: root.traceLog,
       hoverRect: selector.hoverRect,

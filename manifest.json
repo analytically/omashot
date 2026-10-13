@@ -36,6 +36,7 @@
       "showResult": true,
       "openAnnotate": false,
       "exportDir": "",
+      "optimizeShots": 5,
       "delay": 0,
       "showCursor": false,
       "confirmDelete": false,
@@ -79,6 +80,16 @@
         "label": "Export folder",
         "defaultValue": "",
         "description": "Where screenshots are saved. Empty follows $OMARCHY_SCREENSHOT_DIR, then the XDG Pictures directory."
+      },
+      {
+        "key": "optimizeShots",
+        "type": "integer",
+        "label": "Re-compress saved shots",
+        "defaultValue": 5,
+        "min": 0,
+        "max": 9,
+        "step": 1,
+        "description": "Re-compress a shot that is already saved, in the background and never in front of the card: 0 (off), 5 (balanced, the default) or 9 (smallest). The capture itself is always written at the level that is fast enough not to be waited on."
       },
       {
         "key": "delay",

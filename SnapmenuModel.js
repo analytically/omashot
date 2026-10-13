@@ -83,6 +83,11 @@ var DEFAULT_SETTINGS = {
   // question by default.
   confirmDelete: false,
   exportDir: "",
+  // On by default, at the middle step: the capture writes at the level grim writes fast so
+  // the card can appear at once, and this is the pass that re-compresses the file after
+  // that, in the background, where it cannot delay anything the user sees. It is the only
+  // setting that spends CPU after a shot is taken, so Off is a real choice.
+  optimizeShots: 5,
   // Off by default: a self-timer that is always on puts a wait in front of every
   // capture. The ring offers 3, 5, 10 and 15 seconds, and the bar icon shows
   // when one is armed.
@@ -115,6 +120,17 @@ var DIM_CHOICES = [
   { value: 0.25, label: "Light" },
   { value: 0.4, label: "Medium" },
   { value: 0.55, label: "Strong" }
+]
+
+// What the second stage of a capture spends its CPU on. The values are zlib levels: the
+// capture itself is always written at level 1, because that is the one that is fast
+// enough to be in front of the card. 3 would be a step with nothing in it, and 9 costs
+// six times the CPU of 5 for about 5% more — measured on a 2880x1800 shot, see
+// tests/manual/optimize.sh.
+var OPTIMIZE_CHOICES = [
+  { value: 0, label: "Off" },
+  { value: 5, label: "Balanced" },
+  { value: 9, label: "Smallest" }
 ]
 
 // How wide the action card is. The preview fills the card's width, so this is the
@@ -335,6 +351,35 @@ function parseRecentShots(text, limit) {
 
 // The capture helper prints exactly one JSON line; be tolerant of anything
 // else a shell profile might have added to stdout.
+// The second stage of a capture reports sizes, not pixels: the caller has a shot on screen
+// already and only needs to know whether the file behind it changed.
+function parseOptimizeResult(text) {
+  var out = { ok: false, reason: "no-output", path: "", before: 0, after: 0, saved: false,
+    savedBytes: 0 }
+  var parsed = null
+  var lines = String(text || "").split("\n")
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var line = String(lines[i]).replace(/^\s+|\s+$/g, "")
+    if (!line || line.charAt(0) !== "{") continue
+    try {
+      parsed = JSON.parse(line)
+    } catch (e) {
+      parsed = null
+    }
+    if (parsed && typeof parsed === "object") break
+    parsed = null
+  }
+  if (!parsed || typeof parsed !== "object") return out
+  out.ok = parsed.ok === true
+  out.reason = String(parsed.reason || (out.ok ? "" : "no-output"))
+  out.path = String(parsed.path || "")
+  out.before = isFinite(Number(parsed.before)) ? Math.max(0, Math.round(Number(parsed.before))) : 0
+  out.after = isFinite(Number(parsed.after)) ? Math.max(0, Math.round(Number(parsed.after))) : 0
+  out.saved = out.ok && parsed.saved === true
+  out.savedBytes = out.saved && out.before > out.after ? out.before - out.after : 0
+  return out
+}
+
 function parseCaptureResult(text) {
   var lines = String(text || "").split("\n")
   for (var i = lines.length - 1; i >= 0; i--) {
@@ -458,6 +503,9 @@ function normalizeDelay(value) {
 function normalizeGlaze(value) { return normalizeLevel(GLAZE_CHOICES, value, 0.1) }
 function glazeLabel(value) { return levelLabel(GLAZE_CHOICES, value, 0.1) }
 function nextGlaze(value) { return nextLevel(GLAZE_CHOICES, value, 0.1) }
+function normalizeOptimize(value) { return normalizeLevel(OPTIMIZE_CHOICES, value, 5) }
+function optimizeLabel(value) { return levelLabel(OPTIMIZE_CHOICES, value, 5) }
+function nextOptimize(value) { return nextLevel(OPTIMIZE_CHOICES, value, 5) }
 
 function normalizeDeleteMode(value) {
   var wanted = String(value === undefined || value === null ? "" : value)
@@ -500,6 +548,7 @@ function normalizeSettings(raw) {
   if ("showCursor" in raw) out.showCursor = boolValue(raw.showCursor, out.showCursor)
   if ("confirmDelete" in raw) out.confirmDelete = boolValue(raw.confirmDelete, out.confirmDelete)
   if ("exportDir" in raw) out.exportDir = String(raw.exportDir || "")
+  if ("optimizeShots" in raw) out.optimizeShots = normalizeOptimize(raw.optimizeShots)
   if ("delay" in raw) out.delay = normalizeDelay(raw.delay)
   if ("glaze" in raw) out.glaze = normalizeGlaze(raw.glaze)
   if ("dim" in raw) out.dim = normalizeDim(raw.dim)
@@ -1128,6 +1177,9 @@ function settingsRows(settings, dirs) {
     s.exportDir ? { kind: "action", id: "resetExportDir", icon: ICON.back,
       label: "Use the default folder", detail: fallbackDir,
       action: "reset-export-dir" } : null,
+    { kind: "value", id: "optimizeShots", icon: ICON.image, label: "Re-compress saved shots",
+      detail: "After the card is up, never in front of it", value: optimizeLabel(s.optimizeShots),
+      action: "cycle-optimize" },
     { kind: "toggle", id: "confirmDelete", icon: ICON.alert, label: "Confirm deletion",
       detail: "Ask before a screenshot is deleted", value: s.confirmDelete,
       action: "toggle-setting", key: "confirmDelete" },

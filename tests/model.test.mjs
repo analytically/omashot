@@ -25,7 +25,8 @@ const EXPORTS = [
   "normalizeDim", "dimLabel", "nextDim", "DIM_CHOICES", "normalizeDeleteMode", "deleteModeLabel",
   "nextDeleteMode", "DELETE_MODES", "normalizeLevel", "levelLabel", "nextLevel", "shotCountLabel",
   "deleteVerb", "needsConfirm", "indexOfShot", "neighbourShot", "barIcon", "menuRows",
-  "CLIPBOARD_IMAGE_TYPES", "clipboardHasImage",
+  "CLIPBOARD_IMAGE_TYPES", "clipboardHasImage", "OPTIMIZE_CHOICES", "normalizeOptimize",
+  "optimizeLabel", "nextOptimize", "parseOptimizeResult",
   "historyRows", "resultRows", "settingsRows", "aboutRows", "normalizeDrag", "dragRect",
   "dragConstraintLabel", "dragModeFor", "globalGeometry", "clipRectToBounds", "localRects", "rectAt",
   "rectArea", "windowRects", "nextRect", "rectLabel", "rowSelectable", "clampIndex",
@@ -613,6 +614,65 @@ test("Open from Clipboard is only offered when there is an image to open", () =>
   assert.equal(withImage.some((entry) => entry === null), false)
 })
 
+test("re-compressing a saved shot is a step, and the default is the balanced one", () => {
+  // The capture writes PNG at the level grim writes fast, so the card can appear at
+  // once; the second stage trades CPU for disk afterwards, in the background. Off is a
+  // real choice — it is the only step that costs anything after the shot is taken.
+  assert.equal(Model.DEFAULT_SETTINGS.optimizeShots, 5)
+  assert.deepEqual(Model.OPTIMIZE_CHOICES.map((c) => c.value), [0, 5, 9])
+  assert.equal(Model.optimizeLabel(0), "Off")
+  assert.equal(Model.optimizeLabel(5), "Balanced")
+  assert.equal(Model.optimizeLabel(9), "Smallest")
+  // A hand-edited shell.json snaps to a step instead of reaching ImageMagick as a level
+  // it cannot use.
+  assert.equal(Model.normalizeOptimize(3), 5)
+  assert.equal(Model.normalizeOptimize("smallest"), 5)
+  assert.equal(Model.normalizeOptimize(0), 0)
+  assert.equal(Model.nextOptimize(5), 9)
+  assert.equal(Model.nextOptimize(9), 0)
+  assert.equal(Model.nextOptimize(0), 5)
+
+  const row = Model.settingsRows({}).find((entry) => entry.id === "optimizeShots")
+  assert.equal(row.kind, "value")
+  assert.equal(row.label, "Re-compress saved shots")
+  assert.equal(row.value, "Balanced")
+  assert.equal(row.action, "cycle-optimize")
+  assert.equal(Model.settingsRows({ optimizeShots: 0 }).find((e) => e.id === "optimizeShots").value, "Off")
+})
+
+test("the optimize pass reports what it saved, and nothing when it saved nothing", () => {
+  const saved = Model.parseOptimizeResult(
+    '{"ok":true,"mode":"optimize","path":"/p/a.png","before":1454,"after":1208,"saved":true}')
+  assert.equal(saved.ok, true)
+  assert.equal(saved.saved, true)
+  assert.equal(saved.path, "/p/a.png")
+  assert.equal(saved.before, 1454)
+  assert.equal(saved.after, 1208)
+  assert.equal(saved.savedBytes, 246)
+
+  // A pass that cannot improve the file reports the size it left behind, so the caller
+  // knows the file it is showing is the one that was already there.
+  const skipped = Model.parseOptimizeResult(
+    '{"ok":true,"mode":"optimize","path":"/p/a.png","before":1208,"after":1208,"saved":false}')
+  assert.equal(skipped.ok, true)
+  assert.equal(skipped.saved, false)
+  assert.equal(skipped.savedBytes, 0)
+
+  // A shot deleted while the pass ran is not a failure of the capture, but the caller
+  // still has to hear about it.
+  const gone = Model.parseOptimizeResult('{"ok":false,"reason":"gone"}')
+  assert.equal(gone.ok, false)
+  assert.equal(gone.reason, "gone")
+  assert.equal(gone.saved, false)
+
+  // Output that is not JSON at all never reaches the UI as a number.
+  const junk = Model.parseOptimizeResult("not json at all")
+  assert.equal(junk.ok, false)
+  assert.equal(junk.saved, false)
+  assert.equal(junk.reason, "no-output")
+  assert.equal(junk.savedBytes, 0)
+})
+
 test("the model and the capture script agree about which images can be opened", () => {
   // The list lives in two places — the model decides whether to offer the row, the
   // script decides whether it can write the image out — and a change in one that
@@ -752,7 +812,8 @@ test("the manifest and the model agree about every setting", () => {
   // Every numeric step the model offers has to be inside the range the schema
   // advertises, or the settings UI and the card would disagree.
   const steps = { delay: Model.DELAY_CHOICES, glaze: Model.GLAZE_CHOICES.map((c) => c.value),
-    dim: Model.DIM_CHOICES.map((c) => c.value), cardWidth: Model.CARD_WIDTHS.map((c) => c.value) }
+    dim: Model.DIM_CHOICES.map((c) => c.value), cardWidth: Model.CARD_WIDTHS.map((c) => c.value),
+    optimizeShots: Model.OPTIMIZE_CHOICES.map((c) => c.value) }
   for (const [key, values] of Object.entries(steps)) {
     const entry = schema.get(key)
     // Both numeric types: skipping "integer" is how a max of 10 next to a choice of
@@ -1145,7 +1206,7 @@ test("history, result, settings and about row shapes", () => {
   assert.deepEqual(group("After a capture").map((r) => r.id),
     ["copyToClipboard", "saveToDisk", "showResult", "openAnnotate"])
   assert.deepEqual(group("Files").map((r) => r.id),
-    ["exportDir", "confirmDelete", "cardWidth", "deleteMode"])
+    ["exportDir", "optimizeShots", "confirmDelete", "cardWidth", "deleteMode"])
 
   const toggles = settings.filter((r) => r.kind === "toggle")
   assert.deepEqual(toggles.map((r) => r.key),

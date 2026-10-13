@@ -49,6 +49,32 @@ selection, which is what keeps the image pasteable.
 Screenshots land in `$SNAPMENU_DIR`, else `$OMARCHY_SCREENSHOT_DIR`, else the XDG
 Pictures directory, named `screenshot-YYYY-MM-DD_HH-MM-SS.png`.
 
+## The two stages of a capture
+
+A capture writes PNG at `SNAPMENU_PNG_LEVEL` (default 1), because that level is what makes
+the card appear at once: grim at level 9 takes 1.5 s more on a 2880x1800 screen, and that
+second and a half would be in front of the card.
+
+The file is re-compressed afterwards by `--optimize <file> [--level N]` in the same script,
+at zlib level 5 by default (`optimizeShots`: 0 off, 5 balanced, 9 smallest). Three things
+make that invisible, and each of them is a bug if it regresses:
+
+- **It never runs in front of the card.** The pass is queued when the preview image reports
+  `Image.Ready`, not when the capture lands, so it cannot delay the card and cannot rename
+  the file out from under the image reading it. With the card switched off a 1.2 s timer
+  stands in for the preview.
+- **It never competes for the machine.** One pass at a time, queued behind each other, run as
+  `ionice -c3 nice -n 19`. Measured: three captures took 108 ms average with nothing else
+  running and 106 ms with four passes going.
+- **It keeps the file's name and timestamp.** The rename is atomic, so the path on the
+  clipboard, the history listing, tensaku and a QML image that already loaded all keep
+  working. A shot deleted while the pass ran is not renamed back to life, and a pass that
+  cannot do better leaves the file alone.
+
+`tests/manual/optimize.sh` is the live check: the card is up before any pass starts, the
+running pass is niced to 19, the file ends up smaller than a level-1 copy of itself with the
+same dimensions, and two shots in a row both get dealt with.
+
 History *is* the export folder: a listing of the newest PNGs there, so a shot that
 leaves the folder leaves the list, no matter who removed it. Delete uses `gio
 trash` when available and `rm` otherwise; a shot the plugin is throwing away (with
@@ -69,7 +95,7 @@ without anything taking it.
 | `ActionRow.qml` | One menu row (glyph, label, detail, trailing value/toggle) |
 | `SnapmenuModel.js` | Pure logic: row lists, parsing, geometry, settings, navigation |
 | `BarWidget.qml` | The bar glyph, its state (camera / armed timer / recording), and the popup's lifecycle |
-| `bin/snapmenu-capture.sh` | Freeze, crop, rects, clipboard, delete — one JSON line out |
+| `bin/snapmenu-capture.sh` | Freeze, crop, rects, clipboard, delete, re-compress — one JSON line out |
 | `native/snapmenu-clipboard` | The Rust clipboard helper |
 | `tests/model.test.mjs` | `node --test tests/` |
 

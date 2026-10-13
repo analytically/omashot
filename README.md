@@ -143,6 +143,14 @@ pick somewhere else in Settings.
 each was taken and how big it is. Deleting from there sends the file to the
 Trash, so a mistake is recoverable from your file manager.
 
+Shots are written at the compression level that is fast enough to put the card on
+screen straight away, and re-compressed a moment later, while you are looking at
+it. That second pass runs at idle priority, starts only once the picture is on
+screen, and keeps the file's name — so nothing you have already copied stops
+working, and the pause before the card appears is the same with it on as with it
+off. How much it saves depends on what is on screen: a desktop full of windows and
+wallpaper saves a good deal, a plain one almost nothing.
+
 ## Settings
 
 Open **Settings…** in the menu, or edit this plugin's entry in
@@ -155,6 +163,7 @@ Open **Settings…** in the menu, or edit this plugin's entry in
 | `showResult` | `true` | Open the action card after a capture |
 | `openAnnotate` | `false` | Hand every shot straight to tensaku |
 | `exportDir` | `""` | Export folder; empty follows the Omarchy default |
+| `optimizeShots` | `5` | Re-compress saved shots: `0` (off), `5` (balanced) or `9` (smallest) |
 | `showCursor` | `false` | Draw the pointer into the screenshot |
 | `delay` | `0` | Self-timer: 0 (off), 3, 5, 10 or 15 seconds |
 | `glaze` | `0.1` | Wash over the area being captured: 0, 0.06, 0.1, 0.14 or 0.2 |

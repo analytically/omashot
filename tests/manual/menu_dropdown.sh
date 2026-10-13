@@ -109,7 +109,10 @@ rm -f "$STATE_DIR/last-shot" 2>/dev/null
 # does that. Leave a recognisable payload there so "unchanged" is a real claim and
 # not just "the clipboard happens to be empty".
 CLIP_SENTINEL="snapmenu-sentinel-$(date +%s)"
-printf '%s' "$CLIP_SENTINEL" | wl-copy
+# wl-copy forks and stays alive to serve the selection, and it inherits stdout: a caller
+# that pipes this suite would then wait for end-of-file forever. Its own output goes
+# nowhere.
+printf '%s' "$CLIP_SENTINEL" | wl-copy >/dev/null 2>&1
 sleep 0.3
 omarchy-shell snapmenu.menu activate "$FULLSCREEN_ROW" >/dev/null
 
@@ -439,7 +442,7 @@ printf 'the clipboard row follows what the clipboard holds\n'
 # when there is one: a path, a URL or a paragraph on the clipboard has nothing for it to
 # open, and a row that fails is worse than a row that is not there. The overlay's own
 # view of the clipboard is what both surfaces build their rows from.
-printf 'snapmenu-clipboard-text' | wl-copy
+printf 'snapmenu-clipboard-text' | wl-copy >/dev/null 2>&1
 sleep 0.5
 omarchy-shell snapmenu.menu close >/dev/null 2>&1
 sleep 0.5
@@ -453,7 +456,7 @@ check "and the dropdown still knows its own rows" \
 omarchy-shell snapmenu.menu close >/dev/null 2>&1
 sleep 0.6
 
-wl-copy --type image/png <"$CASE_DESKTOP"
+wl-copy --type image/png <"$CASE_DESKTOP" >/dev/null 2>&1
 sleep 0.5
 omarchy-shell snapmenu.menu open >/dev/null 2>&1
 sleep 1.4
