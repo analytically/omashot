@@ -105,6 +105,12 @@ omarchy-shell shell summon "$PLUGIN_ID" '{"command":{"action":"set-delay","value
 sleep 0.4
 FULLSCREEN_ROW=$(jq -r 'to_entries | map(select(.value.id == "fullscreen"))[0].key' <<<"$ROWS")
 rm -f "$STATE_DIR/last-shot" 2>/dev/null
+# Taking a shot must not replace what is on the clipboard: Copy on the card is what
+# does that. Leave a recognisable payload there so "unchanged" is a real claim and
+# not just "the clipboard happens to be empty".
+CLIP_SENTINEL="snapmenu-sentinel-$(date +%s)"
+printf '%s' "$CLIP_SENTINEL" | wl-copy
+sleep 0.3
 omarchy-shell snapmenu.menu activate "$FULLSCREEN_ROW" >/dev/null
 
 SHOT=""
@@ -118,6 +124,9 @@ printf '  shot:  %s\n' "$SHOT"
 
 check "the action card is up" "$(state | jq -r '.stage')" "result"
 check "and opened" "$(state | jq -r '.opened')" "true"
+check "the capture left the clipboard alone" "$(wl-paste 2>/dev/null)" "$CLIP_SENTINEL"
+check "and put no image on it" \
+  "$(wl-paste --list-types 2>/dev/null | grep -cx 'image/png')" "0"
 
 # Keys only reach the card once the layer surface has keyboard focus, which the
 # compositor grants a moment after it maps. Waiting for it here is also the

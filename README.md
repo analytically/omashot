@@ -1,6 +1,6 @@
 # Snapmenu — screenshots for Omarchy
 
-Click the camera in the bar, choose what to capture, and the shot is already on
+Click the camera in the bar, choose what to capture, and one key puts the shot on
 your clipboard. No toolbar to learn, no window to find, nothing of the menu ever
 in the picture.
 
@@ -14,13 +14,16 @@ in the picture.
 2. **Choose what to capture**: drag an area, or just *click a window* and Snapmenu
    outlines exactly what it will take. The screen is frozen the moment the picker
    opens, so nothing moves or repaints under your drag.
-3. The shot lands on your clipboard **and** in your Pictures folder, with a card
-   offering the next step: **Copy**, **Annotate**, **Share…**, **Reveal in
-   Files**, or **Delete**.
-4. **`Esc`** and it's gone. The shot is already where you wanted it.
+3. The shot is saved to your Pictures folder and the card appears. Press **`C`** to
+   put it on the clipboard, or pick **Annotate**, **Share…**, **Reveal in Files**
+   or **Delete**.
+4. **`Esc`** closes the card. The file stays where it is, and your clipboard is
+   left exactly as you found it.
 
-Nothing to confirm, nothing left open. If you would rather not see the card at
-all, turn it off in Settings and every capture goes straight to the clipboard.
+Nothing to confirm, nothing left open. Nothing goes on the clipboard unless you
+press **Copy** — switch on **Copy file to clipboard** in Settings and every shot
+lands there the moment it is taken instead. Turn off **Show action card** as well
+and a capture is saved and forgotten.
 
 ## Why it feels quick
 
@@ -142,8 +145,8 @@ Open **Settings…** in the menu, or edit this plugin's entry in
 
 | Key | Default | Meaning |
 |---|---|---|
-| `copyToClipboard` | `true` | Put every shot on the clipboard, as image and path |
-| `saveToDisk` | `true` | Keep the file; off writes a temp file and copies only |
+| `copyToClipboard` | `false` | Copy every shot to the clipboard as it is taken, image and path |
+| `saveToDisk` | `true` | Keep the shot in your Pictures folder; off writes a temporary file |
 | `showResult` | `true` | Open the action card after a capture |
 | `openAnnotate` | `false` | Hand every shot straight to tensaku |
 | `exportDir` | `""` | Export folder; empty follows the Omarchy default |

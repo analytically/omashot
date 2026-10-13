@@ -71,7 +71,10 @@ var ICON = {}
 for (var iconName in ICON_CODEPOINTS) ICON[iconName] = glyphForCodePoint(ICON_CODEPOINTS[iconName])
 
 var DEFAULT_SETTINGS = {
-  copyToClipboard: true,
+  // Off by default: the clipboard belongs to whoever is using the machine, so taking a
+  // shot must not replace what is already on it. Copying is a press on the card, and
+  // copying every capture on its way past is something to opt into.
+  copyToClipboard: false,
   saveToDisk: true,
   showResult: true,
   openAnnotate: false,

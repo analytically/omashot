@@ -905,6 +905,20 @@ test("the bar icon says what the plugin is doing", () => {
   assert.equal(Model.barIcon(null).tone, "idle")
 })
 
+test("a capture does not touch the clipboard unless Copy is pressed", () => {
+  // The clipboard is the user's: taking a shot must not replace what is already on
+  // it. Copying is a press on the card, and copying on every capture is something
+  // to opt into.
+  assert.equal(Model.DEFAULT_SETTINGS.copyToClipboard, false)
+  const row = Model.settingsRows({}).find((entry) => entry.id === "copyToClipboard")
+  assert.equal(row.kind, "toggle")
+  assert.equal(row.value, false)
+  // The opt-in still reads back, including from a hand-edited shell.json string.
+  assert.equal(Model.normalizeSettings({ copyToClipboard: true }).copyToClipboard, true)
+  assert.equal(Model.normalizeSettings({ copyToClipboard: "true" }).copyToClipboard, true)
+  assert.equal(Model.normalizeSettings({ copyToClipboard: "no" }).copyToClipboard, false)
+})
+
 test("confirming a delete is a setting, off by default", () => {
   // Off by default: deleting a shot is a deliberate press, and the card says
   // which file it is.

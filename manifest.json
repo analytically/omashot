@@ -31,7 +31,7 @@
     "defaultSection": "right",
     "allowMultiple": false,
     "defaults": {
-      "copyToClipboard": true,
+      "copyToClipboard": false,
       "saveToDisk": true,
       "showResult": true,
       "openAnnotate": false,
@@ -49,8 +49,8 @@
         "key": "copyToClipboard",
         "type": "boolean",
         "label": "Copy file to clipboard",
-        "defaultValue": true,
-        "description": "Put every screenshot on the clipboard as a PNG as soon as it is taken."
+        "defaultValue": false,
+        "description": "Put every screenshot on the clipboard as a PNG as soon as it is taken, instead of only when Copy is pressed. Off by default, so a capture never replaces what is already on the clipboard."
       },
       {
         "key": "saveToDisk",
