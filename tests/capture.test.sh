@@ -438,6 +438,31 @@ case_direct_captures_wait_for_the_menu_to_go() {
   if ((probes >= 2)); then pass; else fail "expected the popout rectangle to be probed, saw $probes"; fi
 }
 
+case_state_and_shots_are_owner_only() {
+  new_case "state dirs and captures are readable by the owner only"
+  write_monitor_fixture 1
+  stub_grim
+  stub_hyprctl 0
+
+  # A tree left behind by an older, looser run must be corrected on the way in.
+  mkdir -p "$CASE/state/freeze" "$CASE/state/tmp"
+  chmod 755 "$CASE/state" "$CASE/state/freeze" "$CASE/state/tmp"
+
+  local json frame shot
+  json=$(run_capture --freeze)
+  frame=$(jq_str "$json" '.path')
+  assert_eq "state dir corrected to 700" "$(stat -c '%a' "$CASE/state")" "700"
+  assert_eq "freeze dir corrected to 700" "$(stat -c '%a' "$CASE/state/freeze")" "700"
+  assert_eq "frame file is 600" "$(stat -c '%a' "$frame")" "600"
+
+  json=$(run_capture --crop "100,100 300x200" --freeze-file "$frame" \
+    --dir "$CASE/out" --mode region)
+  shot=$(jq_str "$json" '.path')
+  assert_eq "shot file is 600" "$(stat -c '%a' "$shot")" "600"
+  assert_eq "last-region is 600" "$(stat -c '%a' "$CASE/state/last-region")" "600"
+  assert_eq "last-shot is 600" "$(stat -c '%a' "$CASE/state/last-shot")" "600"
+}
+
 case_freeze_reports_no_monitor() {
   new_case "--freeze with no focused monitor is a failure, not a 0x0 screen"
   printf '[]' >"$FIXTURES/monitors.json"   # hyprctl answered, with nothing focused
@@ -881,6 +906,7 @@ case_cursor_is_left_out_by_default
 case_freeze_keeps_only_the_newest_frame
 case_freeze_skips_the_settle_probe_when_asked
 case_freeze_reports_no_monitor
+case_state_and_shots_are_owner_only
 case_no_stray_output_files
 case_output_dir_can_be_overridden
 case_temp_shots_do_not_pile_up

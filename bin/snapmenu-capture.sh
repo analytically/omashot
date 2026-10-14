@@ -23,6 +23,11 @@
 
 set -o pipefail
 
+# Everything this helper writes is screen content: freeze frames, clipboard
+# snapshots and the shots themselves. Private by default — the owner can share
+# a shot by sending it, other local users cannot just read it off the disk.
+umask 077
+
 OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
 
 # Tools are absolute by default so an inherited PATH cannot stand in for them.
@@ -226,6 +231,14 @@ require_grim() {
 
 temp_dir() { printf '%s/tmp' "$STATE_DIR"; }
 
+# State dirs hold screen content and may predate this umask, so ownership is
+# enforced on every run, not just at creation time.
+ensure_state_dir() { # dir
+  mkdir -p "$1" 2>/dev/null || return 1
+  chmod 700 "$1" 2>/dev/null
+  return 0
+}
+
 default_dir() {
   if [[ -n ${SNAPMENU_DIR:-} ]]; then
     printf '%s' "$SNAPMENU_DIR"
@@ -247,6 +260,7 @@ default_dir() {
 
 target_dir() {
   if ((TEMP)); then
+    ensure_state_dir "$(temp_dir)"
     temp_dir
   elif [[ -n $OUT_DIR ]]; then
     printf '%s' "$OUT_DIR"
@@ -268,7 +282,7 @@ unique_path() { # dir base ext
 stamp() { date +'%Y-%m-%d_%H-%M-%S'; }
 
 remember_shot() { # path
-  mkdir -p "$STATE_DIR" 2>/dev/null
+  ensure_state_dir "$STATE_DIR"
   printf '%s\n' "$1" >"$LAST_SHOT" 2>/dev/null
 }
 
@@ -547,6 +561,14 @@ if ((WANT_FREEZE)); then
   cursors_for_capture
 
   # A freeze frame is scratch space for one selection; keep only the newest.
+  ensure_state_dir "$STATE_DIR" || {
+    emit_fail write-failed
+    exit 0
+  }
+  ensure_state_dir "$FREEZE_DIR" || {
+    emit_fail write-failed
+    exit 0
+  }
   rm -f "$FREEZE_DIR"/freeze-*.png 2>/dev/null
   file="$FREEZE_DIR/freeze-$(stamp).png"
   if ! freeze_to_file "$file" "$output"; then
@@ -638,7 +660,7 @@ if [[ -n $CROP ]]; then
     fi
   fi
 
-  mkdir -p "$STATE_DIR" 2>/dev/null
+  ensure_state_dir "$STATE_DIR"
   printf '%s\n' "$CROP" >"$LAST_REGION" 2>/dev/null
   # SNAPMENU_KEEP_FREEZE is a debugging hook: it keeps the frame the crop came from
   # so the two can be compared by hand. The live identity suite copies the frame

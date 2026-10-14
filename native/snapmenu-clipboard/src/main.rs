@@ -27,6 +27,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 use std::os::fd::OwnedFd;
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -190,13 +191,19 @@ fn snapshot(source: &Path, data: &[u8]) -> std::io::Result<PathBuf> {
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or(0);
     let folder = root.join(format!("{stamp}-{}", std::process::id()));
-    fs::create_dir_all(&folder)?;
+    // Screen content: the snapshot tree is owner-only whatever the umask is,
+    // and a tree created by an older run (or another tool) is corrected too.
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true).mode(0o700);
+    builder.create(&folder)?;
+    let _ = fs::set_permissions(&root, fs::Permissions::from_mode(0o700));
     let name = source
         .file_name()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("screenshot.png"));
     let target = folder.join(name);
     fs::write(&target, data)?;
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o600))?;
     prune(&root, SNAPSHOTS_KEPT);
     Ok(target)
 }
